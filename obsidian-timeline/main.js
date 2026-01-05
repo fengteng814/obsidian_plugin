@@ -64,9 +64,12 @@ const toExport = [
     { tag: "timeline", parser: timelineParser },
     { tag: "timeline-labeled", parser: timelineLabeledParser },
 ];
+const DEFAULT_SETTINGS = {
+    eventSpacing: 1.5,
+};
 
 class TimelineElement {
-    constructor(root, sourcePath) {
+    constructor(root, sourcePath, eventSpacing) {
         this.addEvent = (info) => {
             Object.entries(info).map(([key, val]) => {
                 const element = this.root.createDiv({ cls: key });
@@ -77,6 +80,9 @@ class TimelineElement {
         };
         this.getElement = () => this.root;
         this.root = root.createDiv({ cls: 'timeline' });
+        if (typeof eventSpacing === "number" && !Number.isNaN(eventSpacing)) {
+            this.root.style.setProperty("--timeline-event-spacing", `${eventSpacing}rem`);
+        }
         this.sourcePath = sourcePath;
     }
 }
@@ -91,13 +97,37 @@ const toClassArray = (input) => {
         .trim()
         .split(/\s*,\s*/);
 };
+class TimelineSettingTab extends obsidian.PluginSettingTab {
+    constructor(app, plugin) {
+        super(app, plugin);
+        this.plugin = plugin;
+    }
+    display() {
+        var _a;
+        const { containerEl } = this;
+        containerEl.empty();
+        containerEl.createEl("h2", { text: "Timeline settings" });
+        new obsidian.Setting(containerEl)
+            .setName("Event spacing")
+            .setDesc("Controls the vertical spacing (in rem) between timeline entries.")
+            .addSlider((slider) => slider
+            .setLimits(0, 6, 0.1)
+            .setDynamicTooltip()
+            .setValue((_a = this.plugin.settings.eventSpacing) !== null && _a !== void 0 ? _a : DEFAULT_SETTINGS.eventSpacing)
+            .onChange((value) => __awaiter(this, void 0, void 0, function* () {
+            this.plugin.settings.eventSpacing = value;
+            yield this.plugin.saveSettings();
+        })));
+    }
+}
 class TimelinePlugin extends obsidian.Plugin {
     constructor() {
         super(...arguments);
         this.onload = () => __awaiter(this, void 0, void 0, function* () {
+            yield this.loadSettings();
             toExport.forEach(({ tag, parser }) => {
                 this.registerMarkdownCodeBlockProcessor(tag, (source, root, ctx) => {
-                    const timelineElement = new TimelineElement(root, ctx.sourcePath);
+                    const timelineElement = new TimelineElement(root, ctx.sourcePath, this.settings.eventSpacing);
                     const el = timelineElement.getElement();
                     el.addClass("timeline");
                     const classMatch = source.match(classRegex);
@@ -109,11 +139,20 @@ class TimelinePlugin extends obsidian.Plugin {
                     events.forEach(e => timelineElement.addEvent(e));
                 });
             });
+            this.addSettingTab(new TimelineSettingTab(this.app, this));
             console.log("timeline load");
         });
         this.onunload = () => __awaiter(this, void 0, void 0, function* () {
             console.log("timeline onunload");
         });
+        this.loadSettings = () => __awaiter(this, void 0, void 0, function* () {
+            const data = yield this.loadData();
+            this.settings = Object.assign(Object.assign({}, DEFAULT_SETTINGS), data);
+        });
+        this.saveSettings = () => __awaiter(this, void 0, void 0, function* () {
+            yield this.saveData(this.settings);
+        });
+        this.settings = DEFAULT_SETTINGS;
     }
 }
 
